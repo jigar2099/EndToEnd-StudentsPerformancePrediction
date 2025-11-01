@@ -56,7 +56,7 @@ Right now the quickest way to run everything end‑to‑end is to execute the `d
 What it does under the hood:
 1) Data ingestion (`src/components/data_ingestion.py`)
    - Reads the Students Performance CSV from:
-     `C:\Users\jigar\Desktop\EndToEnd\StudentsPerformancePrediction\notebook\data\stud.csv`
+     `\StudentsPerformancePrediction\notebook\data\stud.csv`
    - Splits into train/test with `test_size=0.2`, `random_state=42`.
    - Writes CSVs under an artifacts folder anchored to `src/`:
      - `src/artifacts/raw.csv`
