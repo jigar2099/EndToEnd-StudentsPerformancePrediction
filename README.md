@@ -1,18 +1,18 @@
 # StudentsPerformancePrediction
 
-Predicting student performance from tabular data — built as a small, end‑to‑end ML project. The repo has the basics in place (logging, exceptions, a few components, an EDA notebook) and leaves clear TODOs for the rest.
+Predicting student performance from tabular data — built as a small, end‑to‑end ML project.
 
 Last updated: 2025-11-01
 
 ## What this is
-- A simple, reproducible pipeline for: ingesting data → transforming it → training a model → making predictions.
-- Current status: early scaffolding. Several files exist as placeholders and still need real code.
+- A simple, reproducible pipeline for: data ingestion → data transformation → model training → evaluation.
+- Status: the core components are implemented and runnable from the `data_ingestion` module’s `__main__` block. A separate CLI pipeline is still a TODO.
 - There’s an EDA notebook under `notebook/` you can open to get a feel for the data and possible features.
 
 ## Stack (short and sweet)
 - Python (version not pinned yet)
 - pip + setuptools (`setup.py` with `find_packages`)
-- Requirements: `pandas`, `numpy`, `seaborn` (see `requirements.txt`)
+- Key libraries: `pandas`, `numpy`, `scikit-learn`, `xgboost`, `catboost`, `seaborn` (see `requirements.txt`)
 - Standard `src/` package layout, supports editable installs via `-e .`
 
 ## Quick start
@@ -28,25 +28,73 @@ Last updated: 2025-11-01
   source .venv/bin/activate
   ```
 
-2) Install deps (editable install works):
+2) Install dependencies
 ```bash
 pip install -r requirements.txt
 pip install -e .
 ```
 
-## Run things (what works today)
-End‑to‑end train/predict CLIs are not implemented yet. These files are present but need code:
-- `src/pipeline/train_pipeline.py` — training entry point (TODO)
-- `src/pipeline/predict_pipeline.py` — prediction entry point (TODO)
-- `src/components/data_ingestion.py` — bring in raw/processed data (TODO)
-- `src/components/data_transformation.py` — preprocessing/feature engineering (TODO)
-- `src/components/model_trainer.py` — training + saving the model (TODO)
-- `src/utils.py` — common helpers (I/O, metrics, etc.) (TODO)
+## Run the implemented pipeline (ingestion → transformation → training)
+Right now the quickest way to run everything end‑to‑end is to execute the `data_ingestion` module directly. Its `__main__` block chains the three steps and prints the final R² on the test split.
 
-While those are WIP, you can open the EDA notebook:
-```bash
-jupyter notebook "notebook/1 . EDA STUDENT PERFORMANCE .ipynb"
-```
+- From the project root (StudentsPerformancePrediction):
+  - Windows (PowerShell):
+    ```powershell
+    python -m src.components.data_ingestion
+    ```
+  - Or directly as a script:
+    ```powershell
+    python .\src\components\data_ingestion.py
+    ```
+  - macOS/Linux:
+    ```bash
+    python -m src.components.data_ingestion
+    # or
+    python src/components/data_ingestion.py
+    ```
+
+What it does under the hood:
+1) Data ingestion (`src/components/data_ingestion.py`)
+   - Reads the Students Performance CSV from:
+     `C:\Users\jigar\Desktop\EndToEnd\StudentsPerformancePrediction\notebook\data\stud.csv`
+   - Splits into train/test with `test_size=0.2`, `random_state=42`.
+   - Writes CSVs under an artifacts folder anchored to `src/`:
+     - `src/artifacts/raw.csv`
+     - `src/artifacts/train.csv`
+     - `src/artifacts/test.csv`
+
+2) Data transformation (`src/components/data_transformation.py`)
+   - Target: `math_score`.
+   - Numerical features: `writing_score`, `reading_score`.
+   - Categorical features: `gender`, `race_ethnicity`, `parental_level_of_education`, `lunch`, `test_preparation_course`.
+   - Pipelines:
+     - Numerical: `SimpleImputer(strategy="median")` → `StandardScaler()`
+     - Categorical: `SimpleImputer(strategy="most_frequent")` → `OneHotEncoder()` → `StandardScaler(with_mean=False)`
+   - Uses a `ColumnTransformer` to combine both.
+   - Saves the fitted preprocessor to: `src/artifacts/preprocessor.pkl`.
+   - Returns NumPy arrays for train and test where the last column is the target.
+
+3) Model training (`src/components/model_trainer.py`)
+   - Splits the arrays back into `X` and `y`.
+   - Trains and evaluates several regressors with simple hyper‑parameter searches via `GridSearchCV` (see `src/utils.py::evaluate_models`):
+     - RandomForestRegressor, DecisionTreeRegressor, GradientBoostingRegressor, LinearRegression, XGBRegressor, CatBoostRegressor, AdaBoostRegressor
+   - Selects the model with the best test R², requires R² ≥ 0.6, and saves it to: `src/artifacts/model.pkl`.
+   - Prints/returns the final test R².
+
+## Where outputs are saved
+- Artifacts directory is anchored to the `src/` folder (not the current working directory):
+  - `src/artifacts/raw.csv`
+  - `src/artifacts/train.csv`
+  - `src/artifacts/test.csv`
+  - `src/artifacts/preprocessor.pkl`
+  - `src/artifacts/model.pkl`
+
+## Logging
+- `src/logger.py` writes timestamped logs under `src/logs/` (e.g., `src/logs/11_01_2025_20_16_20.log`).
+
+## Notes and limitations
+- The ingestion path to the CSV is currently hard‑coded. If you’re running on another machine, update the path in `src/components/data_ingestion.py` or place the CSV in the same location.
+- The end‑to‑end execution is provided via the `data_ingestion` module’s `__main__` block for now. A proper CLI (`src/pipeline/train_pipeline.py`, `predict_pipeline.py`) is still a TODO.
 
 ## EDA highlights (from the notebook)
 These are the key takeaways from `notebook/1 . EDA STUDENT PERFORMANCE .ipynb` (Kaggle Students Performance dataset, 1,000 rows, 8 columns):
@@ -71,32 +119,22 @@ These are the key takeaways from `notebook/1 . EDA STUDENT PERFORMANCE .ipynb` (
 
 Caveats: These are observational correlations from EDA and do not imply causation. They should guide feature engineering and hypothesis formation, and be validated via modeling and, where possible, controlled studies.
 
-When the pipelines exist, commands will look roughly like:
-```bash
-# placeholders — implement args/logic first
-python -m src.pipeline.train_pipeline --config configs/train.yaml
-python -m src.pipeline.predict_pipeline --model artifacts/model.pkl --input data/test.csv --output predictions.csv
-```
-
 ## Scripts / entry points
 - Configured as a Python package via `setup.py`.
 - No `console_scripts` yet. Once the CLIs are added, we can wire them up here or use `python -m ...`.
 
 ## Config and environment
 - No required env vars right now.
-- There’s no config system yet. TODO: add something like `configs/*.yaml` and load it in the pipelines.
-
-## Logging
-- `src/logger.py` writes timestamped logs under `./logs/<timestamp>/<timestamp>.log` relative to the current working directory.
+- A future improvement is to add `configs/*.yaml` and pass paths/params from the CLI rather than hard‑coding them.
 
 ## Tests
 - None yet. Recommended: add `pytest` with tests for:
-  - ingestion
-  - transformations/feature engineering
-  - training + evaluation
+  - ingestion (paths and splits)
+  - transformations/feature engineering (preprocessor persistence)
+  - training + evaluation (model selection, R² threshold)
   - prediction pipeline and error handling
 
-## Where things live
+## Project layout
 ```
 StudentsPerformancePrediction/
 ├─ README.md
@@ -105,24 +143,27 @@ StudentsPerformancePrediction/
 ├─ notebook/
 │  └─ 1 . EDA STUDENT PERFORMANCE .ipynb
 └─ src/
-   ├─ __init__.py                # ensure package marker exists (TODO if missing)
-   ├─ logger.py                  # timestamped logs in ./logs
-   ├─ exception.py               # simple exception helper
-   ├─ utils.py                   # shared helpers (TODO)
+   ├─ __init__.py                
+   ├─ logger.py                  # logs to src/logs
+   ├─ exception.py               
+   ├─ utils.py                   # save_object, evaluate_models, load_object
+   ├─ artifacts/                 # generated outputs (created at runtime)
+   │  ├─ raw.csv
+   │  ├─ train.csv
+   │  ├─ test.csv
+   │  ├─ preprocessor.pkl
+   │  └─ model.pkl
    ├─ components/
-   │  ├─ data_ingestion.py       # TODO
-   │  └─ data_transformation.py  # TODO
+   │  ├─ data_ingestion.py       # implemented
+   │  ├─ data_transformation.py  # implemented
+   │  └─ model_trainer.py        # implemented
    └─ pipeline/
       ├─ train_pipeline.py       # TODO
       └─ predict_pipeline.py     # TODO
 ```
-Note: some files above are empty or partial and will need implementation.
 
 ## Data
-- Dataset paths/download are not set yet. TODO: document where the data comes from, expected schema, and how to access it (local path, URL, registry, etc.).
-
-## Model artifacts
-- Not implemented. TODO: decide an `artifacts/` layout (models, transformers, metrics) and document how they’re saved/loaded.
+- Source: Kaggle “Students Performance” dataset (CSV). For now, the repository expects the CSV at the hard‑coded path shown above.
 
 ## Dev notes
 - `requirements.txt` includes `-e .`. `setup.py` filters it out for `install_requires`, so it’s safe to keep when installing via `-r`.
@@ -130,7 +171,7 @@ Note: some files above are empty or partial and will need implementation.
 - Tooling you might want: `black`, `ruff`/`flake8`, `mypy`, `pre-commit`.
 
 ## Contributing
-PRs are welcome. The biggest wins right now: implement the pipeline modules, add tests, and set up configuration/data management.
+PRs are welcome. Next steps that would add the most value: parameterize input paths, implement CLI pipelines, and add tests.
 
 ## License
 TODO — add a `LICENSE` file and note the chosen license here (e.g., MIT, Apache‑2.0).
